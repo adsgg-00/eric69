@@ -11,12 +11,11 @@
         .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #1d428a; margin-bottom: 5px; }
         p { color: #666; font-size: 14px; margin-bottom: 20px; }
-        /* 圖表容器與提示框樣式 */
         #chart { display: flex; justify-content: center; position: relative; }
         .tooltip { 
             position: absolute; background: rgba(0,0,0,0.8); color: white; 
             padding: 8px 12px; border-radius: 6px; font-size: 13px;
-            pointer-events: none; opacity: 0; transition: opacity 0.2s;
+            pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 10;
         }
     </style>
 </head>
@@ -32,68 +31,34 @@
     </div>
 
     <script>
-        // 1. 設定畫布尺寸與座標縮放比例
         const width = 500, height = 450;
-        // X 軸：NBA 座標 -250 到 250，對應網頁 0 到 500 像素
         const xScale = d3.scaleLinear().domain([-250, 250]).range([0, width]);
-        // Y 軸：NBA 座標 -50 到 400，對應網頁 450 到 0 像素 (網頁 Y 軸是往下的，所以要反轉)
         const yScale = d3.scaleLinear().domain([-50, 400]).range([height, 0]);
 
-        // 建立 SVG 畫布
         const svg = d3.select("#chart").append("svg")
                       .attr("width", width).attr("height", height)
                       .style("background", "#fdfdfd");
 
-        // 2. 畫出標準籃球場線條
-        const court = svg.append("g").attr("class", "court-lines")
-                         .attr("stroke", "#333").attr("stroke-width", 1.5).attr("fill", "none");
-        court.append("circle").attr("cx", xScale(0)).attr("cy", yScale(0)).attr("r", 7.5).attr("stroke", "#e03a3e"); // 籃圈
-        court.append("line").attr("x1", xScale(-30)).attr("y1", yScale(-7.5)).attr("x2", xScale(30)).attr("y2", yScale(-7.5)); // 籃板
-        court.append("rect").attr("x", xScale(-80)).attr("y", yScale(142.5)).attr("width", 160).attr("height", 190); // 禁區
-        court.append("line").attr("x1", xScale(-220)).attr("y1", yScale(-47.5)).attr("x2", xScale(220)).attr("y2", yScale(140)); // 右底角三分
-        court.append("path").attr("d", `M ${xScale(-220)} ${yScale(140)} A 237.5 237.5 0 0 1 ${xScale(220)} ${yScale(140)}`); // 三分弧頂
-
-        // 3. 讀取 JSON 資料並進行六角形運算
         d3.json('shot_data.json').then(data => {
-            
-            // 設定 Hexbin 產生器，設定網格基礎半徑為 12 像素
-            const hexbin = d3.hexbin()
-                             .x(d => xScale(d.LOC_X))
-                             .y(d => yScale(d.LOC_Y))
-                             .radius(12);
-
-            // 將資料丟入產生器，分群打包
+            const hexbin = d3.hexbin().x(d => xScale(d.LOC_X)).y(d => yScale(d.LOC_Y)).radius(12);
             const bins = hexbin(data);
-
-            // 設定尺寸比例尺：依據該區塊出手次數，決定六角形畫多大 (最小 3px，最大 11px)
             const maxShots = d3.max(bins, d => d.length);
             const radiusScale = d3.scaleSqrt().domain([0, maxShots]).range([3, 11]);
-
-            // 設定顏色比例尺：命中率 30% 以下為藍色，45% 為白色，60% 以上為紅色
-            const colorScale = d3.scaleLinear()
-                                 .domain([0.3, 0.45, 0.6])
-                                 .range(["#1d428a", "#f0f0f0", "#e03a3e"])
-                                 .clamp(true); // 超過範圍的直接用最深色
-
-            // 抓取提示框元素
+            const colorScale = d3.scaleLinear().domain([0.3, 0.45, 0.6]).range(["#1d428a", "#f0f0f0", "#e03a3e"]).clamp(true);
             const tooltip = d3.select("#tooltip");
 
-            // 4. 把六角形畫到球場上
+            // 第一步：先畫六角形 (底層)
             svg.append("g")
                .selectAll("path")
                .data(bins)
                .join("path")
-               // 設定六角形的形狀大小
                .attr("d", d => hexbin.hexagon(radiusScale(d.length)))
-               // 將六角形移動到正確的座標
                .attr("transform", d => `translate(${d.x},${d.y})`)
-               // 根據命中率上色
                .attr("fill", d => {
                    const made = d.filter(shot => shot.SHOT_MADE_FLAG === 1).length;
                    return colorScale(made / d.length);
                })
                .attr("stroke", "#ccc").attr("stroke-width", 0.5)
-               // 加上互動：滑鼠/手指點擊時顯示詳細數據
                .on("mouseover", function(event, d) {
                    const total = d.length;
                    const made = d.filter(shot => shot.SHOT_MADE_FLAG === 1).length;
@@ -109,6 +74,34 @@
                    d3.select(this).attr("stroke", "#ccc").attr("stroke-width", 0.5);
                    tooltip.style("opacity", 0);
                });
+
+            // 第二步：再畫球場標線 (頂層)，並加上穿透魔法
+            const court = svg.append("g")
+                             .attr("class", "court-lines")
+                             .attr("stroke", "rgba(0, 0, 0, 0.65)") // 加深顏色為半透明黑
+                             .attr("stroke-width", 2) // 加粗線條
+                             .attr("fill", "none")
+                             .style("pointer-events", "none"); // 讓滑鼠點擊能穿透線條，觸發下方的六角形
+
+            // 1. 籃圈與籃板
+            court.append("circle").attr("cx", xScale(0)).attr("cy", yScale(0)).attr("r", 7.5).attr("stroke", "#e03a3e").attr("stroke-width", 2);
+            court.append("line").attr("x1", xScale(-30)).attr("y1", yScale(-7.5)).attr("x2", xScale(30)).attr("y2", yScale(-7.5));
+            
+            // 2. 禁區 (內外框)
+            court.append("rect").attr("x", xScale(-80)).attr("y", yScale(142.5)).attr("width", xScale(80) - xScale(-80)).attr("height", yScale(-47.5) - yScale(142.5));
+            court.append("rect").attr("x", xScale(-60)).attr("y", yScale(142.5)).attr("width", xScale(60) - xScale(-60)).attr("height", yScale(-47.5) - yScale(142.5));
+
+            // 3. 罰球線半圓 (實線上半圓，虛線下半圓)
+            court.append("path").attr("d", `M ${xScale(-60)} ${yScale(142.5)} A 60 60 0 0 1 ${xScale(60)} ${yScale(142.5)}`);
+            court.append("path").attr("d", `M ${xScale(-60)} ${yScale(142.5)} A 60 60 0 0 0 ${xScale(60)} ${yScale(142.5)}`).attr("stroke-dasharray", "5,5");
+
+            // 4. 籃下合理衝撞區半圓
+            court.append("path").attr("d", `M ${xScale(-40)} ${yScale(0)} A 40 40 0 0 1 ${xScale(40)} ${yScale(0)}`);
+
+            // 5. 三分線 (兩側底角直線 + 弧頂)
+            court.append("line").attr("x1", xScale(-220)).attr("y1", yScale(-47.5)).attr("x2", xScale(-220)).attr("y2", yScale(140));
+            court.append("line").attr("x1", xScale(220)).attr("y1", yScale(-47.5)).attr("x2", xScale(220)).attr("y2", yScale(140));
+            court.append("path").attr("d", `M ${xScale(-220)} ${yScale(140)} A 237.5 237.5 0 0 1 ${xScale(220)} ${yScale(140)}`);
         });
     </script>
 </body>
