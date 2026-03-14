@@ -6,41 +6,79 @@
     <title>NBA 數據分析站</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; padding: 20px; }
-        #chart { max-width: 800px; margin: 0 auto; }
+        body { font-family: 'Arial', sans-serif; text-align: center; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #1d428a; margin-bottom: 5px; }
+        p { color: #666; font-size: 14px; margin-top: 0; }
+        #chart { width: 100%; height: 650px; }
     </style>
 </head>
 <body>
 
-    <h1>Stephen Curry 生涯總得分趨勢</h1>
-    <div id="chart"></div>
+    <div class="container">
+        <h1>Stephen Curry 投籃熱點分析</h1>
+        <p id="status">資料載入中，請稍候...</p>
+        <div id="chart"></div>
+    </div>
 
     <script>
-        // 使用 fetch 讀取目錄下的 JSON 檔案
-        fetch('player_stats.json')
+        // 1. 讀取我們剛剛用 Python 做出來的 JSON 檔案
+        fetch('shot_data.json')
             .then(response => response.json())
             .then(data => {
-                // 設定圖表的資料與樣式
-                const trace = {
-                    x: data.seasons,
-                    y: data.pts,
+                // 2. 把投進 (1) 和沒進 (0) 的球分開
+                const madeShots = data.filter(d => d.SHOT_MADE_FLAG === 1);
+                const missedShots = data.filter(d => d.SHOT_MADE_FLAG === 0);
+
+                // 3. 設定「投進」的點 (紅色實心)
+                const traceMade = {
+                    x: madeShots.map(d => d.LOC_X),
+                    y: madeShots.map(d => d.LOC_Y),
+                    mode: 'markers',
                     type: 'scatter',
-                    mode: 'lines+markers',
-                    marker: { color: '#1d428a', size: 8 }, // 勇士藍
-                    line: { width: 3 }
+                    name: '進球 (Made)',
+                    marker: { color: '#e03a3e', size: 8, opacity: 0.8 }
                 };
 
+                // 4. 設定「沒進」的點 (藍色半透明)
+                const traceMissed = {
+                    x: missedShots.map(d => d.LOC_X),
+                    y: missedShots.map(d => d.LOC_Y),
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: '未進 (Missed)',
+                    marker: { color: '#1d428a', size: 6, opacity: 0.3 }
+                };
+
+                // 5. 畫出籃球場的線條與設定版面
                 const layout = {
-                    title: '常規賽各賽季得分表現',
-                    xaxis: { title: '賽季 (Season ID)' },
-                    yaxis: { title: '總得分 (PTS)' }
+                    hovermode: 'closest',
+                    xaxis: { range: [-250, 250], showgrid: false, zeroline: false, visible: false },
+                    yaxis: { range: [-50, 400], showgrid: false, zeroline: false, visible: false },
+                    shapes: [
+                        { type: 'line', x0: -30, y0: -7.5, x1: 30, y1: -7.5, line: { color: '#333', width: 2 } }, // 籃板
+                        { type: 'circle', x0: -7.5, y0: -7.5, x1: 7.5, y1: 7.5, line: { color: '#e03a3e', width: 2 } }, // 籃圈
+                        { type: 'rect', x0: -80, y0: -47.5, x1: 80, y1: 143.5, line: { color: '#333', width: 2 } }, // 禁區
+                        { type: 'circle', x0: -60, y0: 83.5, x1: 60, y1: 203.5, line: { color: '#333', width: 2 } }, // 罰球半圓
+                        { type: 'path', path: 'M -220, 140 A 237.5 237.5 0 0 1 220, 140', line: { color: '#333', width: 2 } }, // 三分線弧頂
+                        { type: 'line', x0: -220, y0: -47.5, x1: -220, y1: 140, line: { color: '#333', width: 2 } }, // 左底角三分
+                        { type: 'line', x0: 220, y0: -47.5, x1: 220, y1: 140, line: { color: '#333', width: 2 } }  // 右底角三分
+                    ],
+                    plot_bgcolor: '#fdfdfd',
+                    paper_bgcolor: 'white'
                 };
 
-                // 繪製圖表
-                Plotly.newPlot('chart', [trace], layout);
-            })
-            .catch(error => console.error('無法載入資料，請確認 json 檔案是否存在:', error));
+                // 6. 將資料與球場畫到網頁上
+                Plotly.newPlot('chart', [traceMade, traceMissed], layout);
+                
+                // 更新狀態文字
+                document.getElementById('status').innerText = "✅ 成功載入 500 筆模擬投籃數據";
+                })
+            .catch(error => {
+                document.getElementById('status').innerText = "❌ 無法載入資料，請確認 shot_data.json 是否存在。";
+                console.error('Error:', error);
+            });
     </script>
-
 </body>
 </html>
+                
