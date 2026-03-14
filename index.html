@@ -1,10 +1,46 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <title>商逢育的網頁設計作業1</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA 數據分析站</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body { font-family: 'Arial', sans-serif; text-align: center; padding: 20px; }
+        #chart { max-width: 800px; margin: 0 auto; }
+    </style>
 </head>
 <body>
-<h1>stfk</h1>
+
+    <h1>Stephen Curry 生涯總得分趨勢</h1>
+    <div id="chart"></div>
+
+    <script>
+        // 使用 fetch 讀取目錄下的 JSON 檔案
+        fetch('player_stats.json')
+            .then(response => response.json())
+            .then(data => {
+                // 設定圖表的資料與樣式
+                const trace = {
+                    x: data.seasons,
+                    y: data.pts,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    marker: { color: '#1d428a', size: 8 }, // 勇士藍
+                    line: { width: 3 }
+                };
+
+                const layout = {
+                    title: '常規賽各賽季得分表現',
+                    xaxis: { title: '賽季 (Season ID)' },
+                    yaxis: { title: '總得分 (PTS)' }
+                };
+
+                // 繪製圖表
+                Plotly.newPlot('chart', [trace], layout);
+            })
+            .catch(error => console.error('無法載入資料，請確認 json 檔案是否存在:', error));
+    </script>
 
 </body>
 </html>
