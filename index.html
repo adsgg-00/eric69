@@ -4,81 +4,112 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NBA 數據分析站</title>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/d3-hexbin.v0.2.min.js"></script>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; background-color: #f4f4f9; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        body { font-family: 'Arial', sans-serif; text-align: center; background-color: #f4f4f9; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #1d428a; margin-bottom: 5px; }
-        p { color: #666; font-size: 14px; margin-top: 0; }
-        #chart { width: 100%; height: 650px; }
+        p { color: #666; font-size: 14px; margin-bottom: 20px; }
+        /* 圖表容器與提示框樣式 */
+        #chart { display: flex; justify-content: center; position: relative; }
+        .tooltip { 
+            position: absolute; background: rgba(0,0,0,0.8); color: white; 
+            padding: 8px 12px; border-radius: 6px; font-size: 13px;
+            pointer-events: none; opacity: 0; transition: opacity 0.2s;
+        }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h1>Stephen Curry 投籃熱點分析</h1>
-        <p id="status">資料載入中，請稍候...</p>
-        <div id="chart"></div>
+        <p>六角形大小代表「出手頻率」，顏色代表「命中率」(紅高、藍低)</p>
+        
+        <div id="chart">
+            <div id="tooltip" class="tooltip"></div>
+        </div>
     </div>
 
     <script>
-        // 1. 讀取我們剛剛用 Python 做出來的 JSON 檔案
-        fetch('shot_data.json')
-            .then(response => response.json())
-            .then(data => {
-                // 2. 把投進 (1) 和沒進 (0) 的球分開
-                const madeShots = data.filter(d => d.SHOT_MADE_FLAG === 1);
-                const missedShots = data.filter(d => d.SHOT_MADE_FLAG === 0);
+        // 1. 設定畫布尺寸與座標縮放比例
+        const width = 500, height = 450;
+        // X 軸：NBA 座標 -250 到 250，對應網頁 0 到 500 像素
+        const xScale = d3.scaleLinear().domain([-250, 250]).range([0, width]);
+        // Y 軸：NBA 座標 -50 到 400，對應網頁 450 到 0 像素 (網頁 Y 軸是往下的，所以要反轉)
+        const yScale = d3.scaleLinear().domain([-50, 400]).range([height, 0]);
 
-                // 3. 設定「投進」的點 (紅色實心)
-                const traceMade = {
-                    x: madeShots.map(d => d.LOC_X),
-                    y: madeShots.map(d => d.LOC_Y),
-                    mode: 'markers',
-                    type: 'scatter',
-                    name: '進球 (Made)',
-                    marker: { color: '#e03a3e', size: 8, opacity: 0.8 }
-                };
+        // 建立 SVG 畫布
+        const svg = d3.select("#chart").append("svg")
+                      .attr("width", width).attr("height", height)
+                      .style("background", "#fdfdfd");
 
-                // 4. 設定「沒進」的點 (藍色半透明)
-                const traceMissed = {
-                    x: missedShots.map(d => d.LOC_X),
-                    y: missedShots.map(d => d.LOC_Y),
-                    mode: 'markers',
-                    type: 'scatter',
-                    name: '未進 (Missed)',
-                    marker: { color: '#1d428a', size: 6, opacity: 0.3 }
-                };
+        // 2. 畫出標準籃球場線條
+        const court = svg.append("g").attr("class", "court-lines")
+                         .attr("stroke", "#333").attr("stroke-width", 1.5).attr("fill", "none");
+        court.append("circle").attr("cx", xScale(0)).attr("cy", yScale(0)).attr("r", 7.5).attr("stroke", "#e03a3e"); // 籃圈
+        court.append("line").attr("x1", xScale(-30)).attr("y1", yScale(-7.5)).attr("x2", xScale(30)).attr("y2", yScale(-7.5)); // 籃板
+        court.append("rect").attr("x", xScale(-80)).attr("y", yScale(142.5)).attr("width", 160).attr("height", 190); // 禁區
+        court.append("line").attr("x1", xScale(-220)).attr("y1", yScale(-47.5)).attr("x2", xScale(220)).attr("y2", yScale(140)); // 右底角三分
+        court.append("path").attr("d", `M ${xScale(-220)} ${yScale(140)} A 237.5 237.5 0 0 1 ${xScale(220)} ${yScale(140)}`); // 三分弧頂
 
-                // 5. 畫出籃球場的線條與設定版面
-                const layout = {
-                    hovermode: 'closest',
-                    xaxis: { range: [-250, 250], showgrid: false, zeroline: false, visible: false },
-                    yaxis: { range: [-50, 400], showgrid: false, zeroline: false, visible: false },
-                    shapes: [
-                        { type: 'line', x0: -30, y0: -7.5, x1: 30, y1: -7.5, line: { color: '#333', width: 2 } }, // 籃板
-                        { type: 'circle', x0: -7.5, y0: -7.5, x1: 7.5, y1: 7.5, line: { color: '#e03a3e', width: 2 } }, // 籃圈
-                        { type: 'rect', x0: -80, y0: -47.5, x1: 80, y1: 143.5, line: { color: '#333', width: 2 } }, // 禁區
-                        { type: 'circle', x0: -60, y0: 83.5, x1: 60, y1: 203.5, line: { color: '#333', width: 2 } }, // 罰球半圓
-                        { type: 'path', path: 'M -220, 140 A 237.5 237.5 0 0 1 220, 140', line: { color: '#333', width: 2 } }, // 三分線弧頂
-                        { type: 'line', x0: -220, y0: -47.5, x1: -220, y1: 140, line: { color: '#333', width: 2 } }, // 左底角三分
-                        { type: 'line', x0: 220, y0: -47.5, x1: 220, y1: 140, line: { color: '#333', width: 2 } }  // 右底角三分
-                    ],
-                    plot_bgcolor: '#fdfdfd',
-                    paper_bgcolor: 'white'
-                };
+        // 3. 讀取 JSON 資料並進行六角形運算
+        d3.json('shot_data.json').then(data => {
+            
+            // 設定 Hexbin 產生器，設定網格基礎半徑為 12 像素
+            const hexbin = d3.hexbin()
+                             .x(d => xScale(d.LOC_X))
+                             .y(d => yScale(d.LOC_Y))
+                             .radius(12);
 
-                // 6. 將資料與球場畫到網頁上
-                Plotly.newPlot('chart', [traceMade, traceMissed], layout);
-                
-                // 更新狀態文字
-                document.getElementById('status').innerText = "✅ 成功載入 500 筆模擬投籃數據";
-                })
-            .catch(error => {
-                document.getElementById('status').innerText = "❌ 無法載入資料，請確認 shot_data.json 是否存在。";
-                console.error('Error:', error);
-            });
+            // 將資料丟入產生器，分群打包
+            const bins = hexbin(data);
+
+            // 設定尺寸比例尺：依據該區塊出手次數，決定六角形畫多大 (最小 3px，最大 11px)
+            const maxShots = d3.max(bins, d => d.length);
+            const radiusScale = d3.scaleSqrt().domain([0, maxShots]).range([3, 11]);
+
+            // 設定顏色比例尺：命中率 30% 以下為藍色，45% 為白色，60% 以上為紅色
+            const colorScale = d3.scaleLinear()
+                                 .domain([0.3, 0.45, 0.6])
+                                 .range(["#1d428a", "#f0f0f0", "#e03a3e"])
+                                 .clamp(true); // 超過範圍的直接用最深色
+
+            // 抓取提示框元素
+            const tooltip = d3.select("#tooltip");
+
+            // 4. 把六角形畫到球場上
+            svg.append("g")
+               .selectAll("path")
+               .data(bins)
+               .join("path")
+               // 設定六角形的形狀大小
+               .attr("d", d => hexbin.hexagon(radiusScale(d.length)))
+               // 將六角形移動到正確的座標
+               .attr("transform", d => `translate(${d.x},${d.y})`)
+               // 根據命中率上色
+               .attr("fill", d => {
+                   const made = d.filter(shot => shot.SHOT_MADE_FLAG === 1).length;
+                   return colorScale(made / d.length);
+               })
+               .attr("stroke", "#ccc").attr("stroke-width", 0.5)
+               // 加上互動：滑鼠/手指點擊時顯示詳細數據
+               .on("mouseover", function(event, d) {
+                   const total = d.length;
+                   const made = d.filter(shot => shot.SHOT_MADE_FLAG === 1).length;
+                   const pct = Math.round((made / total) * 100);
+                   
+                   d3.select(this).attr("stroke", "black").attr("stroke-width", 2);
+                   tooltip.style("opacity", 1)
+                          .html(`出手: ${total} 次<br>命中率: ${pct}%`)
+                          .style("left", (event.pageX + 10) + "px")
+                          .style("top", (event.pageY - 20) + "px");
+               })
+               .on("mouseout", function() {
+                   d3.select(this).attr("stroke", "#ccc").attr("stroke-width", 0.5);
+                   tooltip.style("opacity", 0);
+               });
+        });
     </script>
 </body>
 </html>
-                
