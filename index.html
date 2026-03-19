@@ -1,36 +1,194 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的運動數據戰情室</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* CSS：讓頁面看起來現代且整潔 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #e9ecef;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 2fr; /* 左側 1/3，右側 2/3 */
+            gap: 20px;
+            width: 90%;
+            max-width: 1200px;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        /* 輸入區域樣式 */
+        .input-panel {
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        h2, h3 { color: #343a40; }
+
+        .input-group { margin-bottom: 15px; }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #495057;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            box-sizing: border-box; /* 確保 padding 不會撐破外框 */
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* 圖表區域樣式 */
+        .chart-panel {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            width: 100% !important;
+            height: auto !important;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container { grid-template-columns: 1fr; } /* 手機版改為單欄 */
+        }
+    </style>
 </head>
 <body>
-    <div style="width: 80%; max-width: 600px;">
-      <h3>📊 本週訓練狀態視覺化</h3>
-      <canvas id="myTrainingChart"></canvas>
+
+<div class="dashboard-container">
+    <div class="input-panel">
+        <h2>🏋️‍♂️ 狀態紀錄</h2>
+        <p>在下方輸入你的身體數據，圖表會立即更新。</p>
+        
+        <div class="input-group">
+            <label for="weightInput">今日體重 (kg)</label>
+            <input type="number" id="weightInput" placeholder="例如: 75.5" step="0.1">
+        </div>
+        
+        <div class="input-group">
+            <label for="bodyFatInput">今日體脂 (%)</label>
+            <input type="number" id="bodyFatInput" placeholder="例如: 18.2" step="0.1">
+        </div>
+        
+        <button onclick="logTodayData()">記錄並更新圖表</button>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <div class="chart-panel">
+        <h3>📈 身體狀態趨勢 (最近 7 次)</h3>
+        <canvas id="bodyStatusChart"></canvas>
+    </div>
+</div>
 
-    <script>
-    // 圖表的設定與數據
-    const ctx = document.getElementById('myTrainingChart');
+<script>
+// --- JavaScript：處理邏輯與圖表控制 ---
 
-    new Chart(ctx, {
-      type: 'bar', // 設定為柱狀圖 (也可以改成 'line' 折線圖)
-      data: {
-        labels: ['週一', '週二', '週三', '週四', '週五', '週六', '週日'],
+// 1. 準備初始數據 (這裡使用假數據模擬最近的紀錄)
+// 未來可以串接 LocalStorage 或外部資料庫
+let dates = ['10/01', '10/02', '10/03', '10/04', '10/05', '10/06', '今日'];
+let weightData = [78.2, 77.9, 77.8, 77.5, 77.1, 76.8]; // 最後一個點留空等使用者輸入
+let bodyFatData = [22.1, 21.9, 21.8, 21.6, 21.4, 21.1]; // 最後一個點留空等使用者輸入
+
+// 2. 初始化 Chart.js
+const ctx = document.getElementById('bodyStatusChart').getContext('2d');
+let myChart = new Chart(ctx, {
+    type: 'line', // 折線圖
+    data: {
+        labels: dates,
         datasets: [{
-          label: '每日訓練時數 (小時)',
-          data: [1, 1.5, 0, 2, 1, 3, 0], // 這裡就是未來可以讓使用者自己填寫的數據
-          backgroundColor: '#36A2EB',
-          borderRadius: 5 // 讓柱狀圖邊角變圓滑，比較好看
+            label: '體重 (kg)',
+            data: weightData,
+            borderColor: '#ff6384',
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            yAxisID: 'y-weight', // 使用左側 Y 軸
+            tension: 0.3 // 讓線條變圓滑
+        }, {
+            label: '體脂 (%)',
+            data: bodyFatData,
+            borderColor: '#36a2eb',
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            yAxisID: 'y-bodyfat', // 使用右側 Y 軸
+            tension: 0.3 // 讓線條變圓滑
         }]
-      },
-      options: {
+    },
+    options: {
+        responsive: true,
         scales: {
-          y: { beginAtZero: true }
+            // 設定雙 Y 軸，讓體重和體脂可以放在一起比較
+            'y-weight': {
+                type: 'linear',
+                position: 'left',
+                title: { display: true, text: '體重 (kg)' }
+            },
+            'y-bodyfat': {
+                type: 'linear',
+                position: 'right',
+                title: { display: true, text: '體脂 (%)' },
+                grid: { drawOnChartArea: false } // 避免網格線重疊
+            }
         }
-      }
-    });
-    </script>
+    }
+});
+
+// 3. 核心互動邏輯：記錄並更新圖表
+function logTodayData() {
+    // A. 獲取使用者輸入
+    const weightInput = document.getElementById('weightInput').value;
+    const bodyFatInput = document.getElementById('bodyFatInput').value;
+    
+    // B. 數位教練邏輯：基礎驗證
+    if (!weightInput || !bodyFatInput) {
+        alert("請確認體重和體脂都有輸入喔！");
+        return;
+    }
+
+    // C. 更新圖表數據
+    // 我們將使用者輸入的數字，放進圖表陣列的最後一個位置 (代表'今日')
+    // 這裡我們只更新數據陣列
+    weightData[dates.length - 1] = parseFloat(weightInput);
+    bodyFatData[dates.length - 1] = parseFloat(bodyFatInput);
+    
+    // D. 關鍵步驟：叫 Chart.js 重畫圖表
+    myChart.update();
+}
+</script>
+
 </body>
 </html>
