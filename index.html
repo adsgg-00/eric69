@@ -118,75 +118,81 @@
 </div>
 
 <script>
-// --- JavaScript：處理邏輯與圖表控制 ---
+// --- JavaScript：結合 LocalStorage 的圖表控制 ---
 
-// 1. 準備初始數據 (這裡使用假數據模擬最近的紀錄)
-// 未來可以串接 LocalStorage 或外部資料庫
-let dates = ['10/01', '10/02', '10/03', '10/04', '10/05', '10/06', '今日'];
-let weightData = [78.2, 77.9, 77.8, 77.5, 77.1, 76.8]; // 最後一個點留空等使用者輸入
-let bodyFatData = [22.1, 21.9, 21.8, 21.6, 21.4, 21.1]; // 最後一個點留空等使用者輸入
+// 1. 讀取資料：從 LocalStorage 拿資料，如果沒有 (第一次使用)，就給一組預設的空陣列或假資料
+let savedData = JSON.parse(localStorage.getItem('mySportsData')) || {
+    dates: ['10/01', '10/02', '10/03', '10/04', '10/05'],
+    weights: [78.2, 77.9, 77.8, 77.5, 77.1],
+    bodyFats: [22.1, 21.9, 21.8, 21.6, 21.4]
+};
 
-// 2. 初始化 Chart.js
+// 2. 初始化 Chart.js (使用我們剛剛讀取到的 savedData)
 const ctx = document.getElementById('bodyStatusChart').getContext('2d');
 let myChart = new Chart(ctx, {
-    type: 'line', // 折線圖
+    type: 'line',
     data: {
-        labels: dates,
+        labels: savedData.dates,
         datasets: [{
             label: '體重 (kg)',
-            data: weightData,
+            data: savedData.weights,
             borderColor: '#ff6384',
             backgroundColor: 'rgba(255, 99, 132, 0.2)',
-            yAxisID: 'y-weight', // 使用左側 Y 軸
-            tension: 0.3 // 讓線條變圓滑
+            yAxisID: 'y-weight',
+            tension: 0.3
         }, {
             label: '體脂 (%)',
-            data: bodyFatData,
+            data: savedData.bodyFats,
             borderColor: '#36a2eb',
             backgroundColor: 'rgba(54, 162, 235, 0.2)',
-            yAxisID: 'y-bodyfat', // 使用右側 Y 軸
-            tension: 0.3 // 讓線條變圓滑
+            yAxisID: 'y-bodyfat',
+            tension: 0.3
         }]
     },
     options: {
         responsive: true,
         scales: {
-            // 設定雙 Y 軸，讓體重和體脂可以放在一起比較
-            'y-weight': {
-                type: 'linear',
-                position: 'left',
-                title: { display: true, text: '體重 (kg)' }
-            },
-            'y-bodyfat': {
-                type: 'linear',
-                position: 'right',
-                title: { display: true, text: '體脂 (%)' },
-                grid: { drawOnChartArea: false } // 避免網格線重疊
-            }
+            'y-weight': { type: 'linear', position: 'left', title: { display: true, text: '體重 (kg)' } },
+            'y-bodyfat': { type: 'linear', position: 'right', title: { display: true, text: '體脂 (%)' }, grid: { drawOnChartArea: false } }
         }
     }
 });
 
-// 3. 核心互動邏輯：記錄並更新圖表
+// 3. 核心互動邏輯：記錄、更新圖表並「存檔」
 function logTodayData() {
-    // A. 獲取使用者輸入
     const weightInput = document.getElementById('weightInput').value;
     const bodyFatInput = document.getElementById('bodyFatInput').value;
     
-    // B. 數位教練邏輯：基礎驗證
     if (!weightInput || !bodyFatInput) {
         alert("請確認體重和體脂都有輸入喔！");
         return;
     }
 
-    // C. 更新圖表數據
-    // 我們將使用者輸入的數字，放進圖表陣列的最後一個位置 (代表'今日')
-    // 這裡我們只更新數據陣列
-    weightData[dates.length - 1] = parseFloat(weightInput);
-    bodyFatData[dates.length - 1] = parseFloat(bodyFatInput);
+    // 取得今天的日期 (格式化為 月/日)
+    let today = new Date();
+    let dateString = (today.getMonth() + 1) + '/' + today.getDate();
+
+    // 將新資料推進 (push) 我們的陣列中
+    savedData.dates.push(dateString);
+    savedData.weights.push(parseFloat(weightInput));
+    savedData.bodyFats.push(parseFloat(bodyFatInput));
+
+    // 小巧思：為了保持圖表好看，如果超過 7 筆資料，就把最舊的 (第一筆) 刪掉
+    if (savedData.dates.length > 7) {
+        savedData.dates.shift(); // 移除陣列的第一個元素
+        savedData.weights.shift();
+        savedData.bodyFats.shift();
+    }
     
-    // D. 關鍵步驟：叫 Chart.js 重畫圖表
+    // 更新圖表畫面
     myChart.update();
+
+    // 🌟 關鍵存檔步驟：將更新後的資料轉成純文字，存回 LocalStorage
+    localStorage.setItem('mySportsData', JSON.stringify(savedData));
+
+    // 清空輸入框，提升使用者體驗
+    document.getElementById('weightInput').value = '';
+    document.getElementById('bodyFatInput').value = '';
 }
 </script>
 
